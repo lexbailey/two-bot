@@ -39,4 +39,4 @@ editor config.sh # Pick your test keyword and your test command word
 
  - Run the bot
 
-Running `./run` will source `secrets.sh` and `config.sh` and then run the bot
+Running `./run` will source `secrets.sh` and `config.sh` and then run the bot. Make sure you have activated the venv before running, or it will probably crash.
