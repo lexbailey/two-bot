@@ -10,20 +10,10 @@ from slackclient import SlackClient
 
 slack_token = os.environ["TWO_SLACK_API_TOKEN"]
 keyword = os.environ["TWO_KEYWORD"]
+command = os.environ["TWO_COMMAND"]
 sc = SlackClient(slack_token)
-
-filename = "twodata.json"
-
-if not os.path.isfile(filename):
-    with open(filename, "w+") as datafile:
-        datafile.write("{}")
-        datafile.close()
-with open(filename, "r") as datafile:
-    twoinfo = json.loads(datafile.read())
-    if "lasttime" not in twoinfo:
-        twoinfo["lasttime"] = {}
-    if "twos" not in twoinfo:
-        twoinfo["twos"] = {}
+filename = "twodata.json" # This should really be a config option
+twoinfo = None
 
 def user_info(user):
     if user is None:
@@ -88,9 +78,22 @@ def lower_id(userid):
         return "I-" + userid[2:-6].lower() + " (IRC)"
     return userid
 
+if not os.path.isfile(filename):
+    with open(filename, "w+") as datafile:
+        datafile.write("{}")
+        datafile.close()
+with open(filename, "r") as datafile:
+    twoinfo = json.loads(datafile.read())
+    if "lasttime" not in twoinfo:
+        twoinfo["lasttime"] = {}
+    if "twos" not in twoinfo:
+        twoinfo["twos"] = {}
+
+
 if not sc.rtm_connect():
     print("Unable to connect")
 else:
+    print("Connected to slack")
     while True:
         data_list = sc.rtm_read(blocking=True)
         for data in data_list:
@@ -114,7 +117,7 @@ else:
                 if not msgtext:
                     continue
                 msgtext = msgtext.strip()
-                if msgtext.startswith("!two"):
+                if msgtext.startswith(command):
                     parts = [part for part in msgtext.split(" ") if part != ""]
                     if len(parts) == 1:
                         twos = twoinfo["twos"]
@@ -129,7 +132,7 @@ else:
                     if len(parts) == 2:
                         match = re.search(r"(?:^<(@[^>]*)>$|^([^@<>\n ]+)$)", parts[1])
                         if not match:
-                            send_message(channelid, "Malformed !two command, didn't recognise parameter")
+                            send_message(channelid, "Malformed %s command, didn't recognise parameter" % (command))
                         else:
                             userid = match.groups()[0]
                             if userid is None:
@@ -143,8 +146,8 @@ else:
                                 userid = "I-%s (IRC)"%(userid)
                             send_message(channelid, "%s has a total of %d" % (user_name(user_info(userid)), twoinfo["twos"].get(lower_id(userid), 0)))
                     if len(parts) > 2:
-                        send_message(channelid, "Malformed !two command, specify zero or one parameters where the optional parameter is a  \"@mention\" for slack users or \"nick\" for IRC users")
-                if msgtext == "2":
+                        send_message(channelid, "Malformed %s command, specify zero or one parameters where the optional parameter is a  \"@mention\" for slack users or \"nick\" for IRC users" % (command))
+                if msgtext == keyword:
                     userid = lower_id(userid)
                     if userid not in twoinfo["twos"]:
                         twoinfo["twos"][userid] = 0
@@ -160,5 +163,5 @@ else:
                         twoinfo["lasttime"][userid] = now
                         with open(filename, "w") as datafile:
                             datafile.write(json.dumps(twoinfo))
-                        send_message(channelid, "Whoops! %s got 2'd! (total: %d)" % (user_name(user), twoinfo["twos"][userid]))
+                        send_message(channelid, "Whoops! %s got %s'd! (total: %d)" % (user_name(user), keyword, twoinfo["twos"][userid]))
 
