@@ -12,181 +12,219 @@ import json
 from operator import itemgetter
 from slackclient import SlackClient
 
-slack_token = os.environ["TWO_SLACK_API_TOKEN"]
-keyword = os.environ["TWO_KEYWORD"]
-command = os.environ["TWO_COMMAND"]
-sc = SlackClient(slack_token)
-filename = "twodata.json"  # This should really be a config option
-twoinfo = None
+class TwoBot:
+    """ The almighty two bot class, instantiate it, then run() it """
+
+    SLACK_TOKEN = os.environ["TWO_SLACK_API_TOKEN"]
+    KEYWORD = os.environ["TWO_KEYWORD"]
+    COMMAND = os.environ["TWO_COMMAND"]
+    FILENAME = "twodata.json"  # This should really be a config option
+
+    def __init__(self):
+        self.slack = SlackClient(TwoBot.SLACK_TOKEN)
+        self.twoinfo = None
+        if not os.path.isfile(TwoBot.FILENAME):
+            with open(TwoBot.FILENAME, "w+") as datafile:
+                datafile.write("{}")
+                datafile.close()
+        with open(TwoBot.FILENAME, "r") as datafile:
+            self.twoinfo = json.loads(datafile.read())
+            if "lasttime" not in self.twoinfo:
+                self.twoinfo["lasttime"] = {}
+            if "twos" not in self.twoinfo:
+                self.twoinfo["twos"] = {}
 
 
-def user_info(user):
-    """ Gets the user info dict from slack for a user ID """
-    if user is None:
-        return None
-    if user.startswith("I-"):
-        # IRC user
-        return {"name": user[2:]}
-    return sc.api_call(
-        "users.info",
-        user=user
-    ).get("user")
-
-
-def channel_info(channel):
-    """ Gets the channel info dict from slack for a user ID """
-    return sc.api_call(
-        "channels.info",
-        channel=channel
-    ).get("channel")
-
-
-def send_message(channel, text):
-    """ Send `text` as a message to `channel` in slack """
-    return sc.api_call(
-        "chat.postMessage",
-        channel=channel,
-        text=text
-    )
-
-
-def get_dict_string(input_dict, path):
-    """ Lookup a valud in the dict from a path joined with `.` """
-    parts = path.split(".")
-    mydict = input_dict
-    for part in parts:
-        if part in mydict:
-            if isinstance(mydict[part], dict):
-                mydict = mydict[part]
-            else:
-                value = mydict[part]
-                if isinstance(value, str):
-                    if value.strip() != "":
-                        return value.strip()
-                    return None
-        else:
+    def user_info(self, user):
+        """ Gets the user info dict from slack for a user ID """
+        if user is None:
             return None
+        if user.startswith("I-"):
+            # IRC user
+            return {"name": user[2:]}
+        return self.slack.api_call(
+            "users.info",
+            user=user
+        ).get("user")
 
 
-def user_name(user):
-    """ Get the name of the user at it should appear in slack """
-    if user is None:
+    def channel_info(self, channel):
+        """ Gets the channel info dict from slack for a user ID """
+        return self.slack.api_call(
+            "channels.info",
+            channel=channel
+        ).get("channel")
+
+
+    def send_message(self, channel, text):
+        """ Send `text` as a message to `channel` in slack """
+        return self.slack.api_call(
+            "chat.postMessage",
+            channel=channel,
+            text=text
+        )
+
+    @staticmethod
+    def get_dict_string(input_dict, path):
+        """ Lookup a valud in the dict from a path joined with `.` """
+        parts = path.split(".")
+        mydict = input_dict
+        for part in parts:
+            if part in mydict:
+                if isinstance(mydict[part], dict):
+                    mydict = mydict[part]
+                else:
+                    value = mydict[part]
+                    if isinstance(value, str):
+                        if value.strip() != "":
+                            return value.strip()
+                        return None
+            else:
+                return None
+
+    @staticmethod
+    def user_name(user):
+        """ Get the name of the user at it should appear in slack """
+        if user is None:
+            return "<Unknown User>"
+        namepaths = [
+            "profile.display_name_normalized",
+            "profile.display_name",
+            "profile.real_name_normalized",
+            "profile.real_name",
+            "real_name",
+            "name"
+        ]
+        for path in namepaths:
+            name = TwoBot.get_dict_string(user, path)
+            if name is not None:
+                return name
         return "<Unknown User>"
-    namepaths = [
-        "profile.display_name_normalized",
-        "profile.display_name",
-        "profile.real_name_normalized",
-        "profile.real_name",
-        "real_name",
-        "name"
-    ]
-    for path in namepaths:
-        name = get_dict_string(user, path)
-        if name is not None:
-            return name
-    return "<Unknown User>"
+
+    @staticmethod
+    def lower_id(userid):
+        """ Make a user ID lower case, if it is an IRC nick style ID """
+        if userid.startswith("I-"):
+            return "I-" + userid[2:-6].lower() + " (IRC)"
+        return userid
 
 
-def lower_id(userid):
-    """ Make a user ID lower case, if it is an IRC nick style ID """
-    if userid.startswith("I-"):
-        return "I-" + userid[2:-6].lower() + " (IRC)"
-    return userid
+    def handle_command(self, msgtext, channelid):
+        """ respond to a command message """
+        parts = [part for part in msgtext.split(" ") if part != ""]
+        if len(parts) == 1:
+            twos = self.twoinfo["twos"]
+            times = self.twoinfo["lasttime"]
+            usertimes = [(user, number, times[user])
+                         for (user, number) in twos.items()]
+            leaders = list(
+                reversed(sorted(usertimes, key=itemgetter(1, 2))))
+            numleaders = 5
+            if len(leaders) > numleaders:
+                leaders = leaders[0:numleaders]
+            text = ", ".join(
+                ["%s: %d" % (TwoBot.user_name(self.user_info(user)), num)
+                 for user, num, _ in leaders])
+            self.send_message(
+                channelid, "Leaderboard of shame: %s" % (text))
+        if len(parts) == 2:
+            match = re.search(
+                r"(?:^<(@[^>]*)>$|^([^@<>\n ]+)$)", parts[1])
+            if not match:
+                self.send_message(
+                    channelid, "Malformed %s command, didn't recognise parameter" %
+                    (TwoBot.COMMAND))
+            else:
+                userid = match.groups()[0]
+                if userid is None:
+                    userid = match.groups()[1]
+                if userid is None:
+                    # uh-oh
+                    return  # ???
+                if userid.startswith("@U"):
+                    userid = userid[1:]
+                else:
+                    userid = "I-%s (IRC)" % (userid)
+                self.send_message(channelid, "%s has a total of %d" % (
+                    TwoBot.user_name(self.user_info(userid)),
+                    self.twoinfo["twos"].get(TwoBot.lower_id(userid), 0)))
+        if len(parts) > 2:
+            self.send_message(
+                channelid, "Malformed %s command, specify zero or one parameters "
+                "where the optional parameter is a  \"@mention\" for slack users "
+                "or \"nick\" for IRC users" % (TwoBot.COMMAND))
 
 
-if not os.path.isfile(filename):
-    with open(filename, "w+") as datafile:
-        datafile.write("{}")
-        datafile.close()
-with open(filename, "r") as datafile:
-    twoinfo = json.loads(datafile.read())
-    if "lasttime" not in twoinfo:
-        twoinfo["lasttime"] = {}
-    if "twos" not in twoinfo:
-        twoinfo["twos"] = {}
+    def handle_keyword(self, channelid, user, userid):
+        """ respond to the keyword """
+        userid = TwoBot.lower_id(userid)
+        if userid not in self.twoinfo["twos"]:
+            self.twoinfo["twos"][userid] = 0
+        if userid not in self.twoinfo["lasttime"]:
+            self.twoinfo["lasttime"][userid] = 0
+        now = time.time()
+        then = self.twoinfo["lasttime"][userid]
+        if then + (60 * 10) > now:
+            # Rate limit
+            pass
+        else:
+            self.twoinfo["twos"][userid] += 1
+            self.twoinfo["lasttime"][userid] = now
+            with open(TwoBot.FILENAME, "w") as datafile:
+                datafile.write(json.dumps(self.twoinfo))
+            self.send_message(channelid, "Whoops! %s got %s'd! (total: %d)" % (
+                TwoBot.user_name(user), TwoBot.KEYWORD, self.twoinfo["twos"][userid]))
 
 
-if not sc.rtm_connect():
-    print("Unable to connect")
-else:
-    print("Connected to slack")
-    while True:
-        data_list = sc.rtm_read(blocking=True)
+    def run_once(self):
+        """ Wait until a messages is available, then deal with it and return """
+        data_list = self.slack.rtm_read(blocking=True)
         for data in data_list:
+            # There's lots of reasons to ignore a message...
             data_type = data.get("type")
-            if data_type == "message":
-                channelid = data.get("channel")
-                channel = channel_info(channelid)
-                if channel is None:
+            if data_type != "message":
+                # Must be of type message
+                continue
+            channelid = data.get("channel")
+            channel = self.channel_info(channelid)
+            if channel is None:
+                # Must have a valid channel
+                continue
+            userid = data.get("user")
+            user = self.user_info(userid)
+            if user is None:
+                if data.get('subtype') == 'bot_message' and data.get('bot_id') == 'B4ZFXE0A0':
+                    userid = "I-" + data.get("username")
+                    user = self.user_info(userid)
+                else:
+                    # Must be from a valid user
                     continue
-                userid = data.get("user")
-                user = user_info(userid)
-                if user is None:
-                    if data.get('subtype') == 'bot_message' and data.get('bot_id') == 'B4ZFXE0A0':
-                        userid = "I-" + data.get("username")
-                        user = user_info(userid)
-                    else:
-                        continue
-                msgtext = data.get("text")
-                print("Message in %s, from %s: %s" %
-                      (channel.get("name"), user_name(user), data.get("text")))
+            msgtext = data.get("text")
+            print("Message in %s, from %s: %s" %
+                  (channel.get("name"), TwoBot.user_name(user), data.get("text")))
 
-                if not msgtext:
-                    continue
-                msgtext = msgtext.strip()
-                if msgtext.startswith(command):
-                    parts = [part for part in msgtext.split(" ") if part != ""]
-                    if len(parts) == 1:
-                        twos = twoinfo["twos"]
-                        times = twoinfo["lasttime"]
-                        usertimes = [(user, number, times[user])
-                                     for (user, number) in twos.items()]
-                        leaders = list(
-                            reversed(sorted(usertimes, key=itemgetter(1, 2))))
-                        numleaders = 5
-                        if len(leaders) > numleaders:
-                            leaders = leaders[0:numleaders]
-                        text = ", ".join(
-                            ["%s: %d" % (user_name(user_info(user)), num) for user, num, _ in leaders])
-                        send_message(
-                            channelid, "Leaderboard of shame: %s" % (text))
-                    if len(parts) == 2:
-                        match = re.search(
-                            r"(?:^<(@[^>]*)>$|^([^@<>\n ]+)$)", parts[1])
-                        if not match:
-                            send_message(
-                                channelid, "Malformed %s command, didn't recognise parameter" % (command))
-                        else:
-                            userid = match.groups()[0]
-                            if userid is None:
-                                userid = match.groups()[1]
-                            if userid is None:
-                                # uh-oh
-                                continue  # ???
-                            if userid.startswith("@U"):
-                                userid = userid[1:]
-                            else:
-                                userid = "I-%s (IRC)" % (userid)
-                            send_message(channelid, "%s has a total of %d" % (
-                                user_name(user_info(userid)), twoinfo["twos"].get(lower_id(userid), 0)))
-                    if len(parts) > 2:
-                        send_message(
-                            channelid, "Malformed %s command, specify zero or one parameters where the optional parameter is a  \"@mention\" for slack users or \"nick\" for IRC users" % (command))
-                if msgtext == keyword:
-                    userid = lower_id(userid)
-                    if userid not in twoinfo["twos"]:
-                        twoinfo["twos"][userid] = 0
-                    if userid not in twoinfo["lasttime"]:
-                        twoinfo["lasttime"][userid] = 0
-                    now = time.time()
-                    then = twoinfo["lasttime"][userid]
-                    if then + (60 * 10) > now:
-                        # Rate limit
-                        pass
-                    else:
-                        twoinfo["twos"][userid] += 1
-                        twoinfo["lasttime"][userid] = now
-                        with open(filename, "w") as datafile:
-                            datafile.write(json.dumps(twoinfo))
-                        send_message(channelid, "Whoops! %s got %s'd! (total: %d)" % (
-                            user_name(user), keyword, twoinfo["twos"][userid]))
+            if not msgtext:
+                # Must contain some text
+                continue
+            msgtext = msgtext.strip()
+
+            # At this point we have a valid message
+            if msgtext.startswith(TwoBot.COMMAND):
+                self.handle_command(msgtext, channelid)
+
+            if msgtext == TwoBot.KEYWORD:
+                self.handle_keyword(channelid, user, userid)
+
+
+    def run(self):
+        """ Run the slack bot! Unitil interrupted """
+        if not self.slack.rtm_connect():
+            print("Unable to connect")
+        else:
+            print("Connected to slack")
+            while True:
+                self.run_once()
+
+
+if __name__ == "__main__":
+    TwoBot().run()
