@@ -1,0 +1,1 @@
+-e git+git@github.com:danieljabailey/python-slackclient.git@master#egg=slackclient
