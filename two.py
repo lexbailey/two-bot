@@ -12,6 +12,7 @@ import json
 from operator import itemgetter
 from slackclient import SlackClient
 
+
 class TwoBot:
     """ The almighty two bot class, instantiate it, then run() it """
 
@@ -34,7 +35,6 @@ class TwoBot:
             if "twos" not in self.twoinfo:
                 self.twoinfo["twos"] = {}
 
-
     def user_info(self, user):
         """ Gets the user info dict from slack for a user ID """
         if user is None:
@@ -47,14 +47,12 @@ class TwoBot:
             user=user
         ).get("user")
 
-
     def channel_info(self, channel):
         """ Gets the channel info dict from slack for a user ID """
         return self.slack.api_call(
             "channels.info",
             channel=channel
         ).get("channel")
-
 
     def send_message(self, channel, text):
         """ Send `text` as a message to `channel` in slack """
@@ -108,7 +106,6 @@ class TwoBot:
             return "I-" + userid[2:-6].lower() + " (IRC)"
         return userid
 
-
     def handle_command(self, msgtext, channelid):
         """ respond to a command message """
         parts = [part for part in msgtext.split(" ") if part != ""]
@@ -154,7 +151,6 @@ class TwoBot:
                 "where the optional parameter is a  \"@mention\" for slack users "
                 "or \"nick\" for IRC users" % (TwoBot.COMMAND))
 
-
     def handle_keyword(self, channelid, user, userid):
         """ respond to the keyword """
         userid = TwoBot.lower_id(userid)
@@ -174,7 +170,6 @@ class TwoBot:
                 datafile.write(json.dumps(self.twoinfo))
             self.send_message(channelid, "Whoops! %s got %s'd! (total: %d)" % (
                 TwoBot.user_name(user), TwoBot.KEYWORD, self.twoinfo["twos"][userid]))
-
 
     def run_once(self):
         """ Wait until a messages is available, then deal with it and return """
@@ -214,7 +209,6 @@ class TwoBot:
 
             if msgtext == TwoBot.KEYWORD:
                 self.handle_keyword(channelid, user, userid)
-
 
     def run(self):
         """ Run the slack bot! Unitil interrupted """
