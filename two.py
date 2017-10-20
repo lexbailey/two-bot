@@ -1,10 +1,14 @@
 #!/usr/bin/env python
+"""
+Two-bot
+A slack bot for counting the number of times people have been
+called out for leaving their keyboard unattended.
+"""
 
 import os
 import re
 import time
 import json
-from copy import copy
 from operator import itemgetter
 from slackclient import SlackClient
 
@@ -12,10 +16,12 @@ slack_token = os.environ["TWO_SLACK_API_TOKEN"]
 keyword = os.environ["TWO_KEYWORD"]
 command = os.environ["TWO_COMMAND"]
 sc = SlackClient(slack_token)
-filename = "twodata.json" # This should really be a config option
+filename = "twodata.json"  # This should really be a config option
 twoinfo = None
 
+
 def user_info(user):
+    """ Gets the user info dict from slack for a user ID """
     if user is None:
         return None
     if user.startswith("I-"):
@@ -26,25 +32,31 @@ def user_info(user):
         user=user
     ).get("user")
 
+
 def channel_info(channel):
+    """ Gets the channel info dict from slack for a user ID """
     return sc.api_call(
         "channels.info",
         channel=channel
     ).get("channel")
 
+
 def send_message(channel, text):
+    """ Send `text` as a message to `channel` in slack """
     return sc.api_call(
         "chat.postMessage",
         channel=channel,
         text=text
     )
 
-def get_dict_string(d, path):
+
+def get_dict_string(input_dict, path):
+    """ Lookup a valud in the dict from a path joined with `.` """
     parts = path.split(".")
-    mydict = d
+    mydict = input_dict
     for part in parts:
         if part in mydict:
-            if type(mydict[part]) == dict:
+            if isinstance(mydict[part], dict):
                 mydict = mydict[part]
             else:
                 value = mydict[part]
@@ -57,6 +69,7 @@ def get_dict_string(d, path):
 
 
 def user_name(user):
+    """ Get the name of the user at it should appear in slack """
     if user is None:
         return "<Unknown User>"
     namepaths = [
@@ -73,10 +86,13 @@ def user_name(user):
             return name
     return "<Unknown User>"
 
+
 def lower_id(userid):
+    """ Make a user ID lower case, if it is an IRC nick style ID """
     if userid.startswith("I-"):
         return "I-" + userid[2:-6].lower() + " (IRC)"
     return userid
+
 
 if not os.path.isfile(filename):
     with open(filename, "w+") as datafile:
@@ -107,12 +123,13 @@ else:
                 user = user_info(userid)
                 if user is None:
                     if data.get('subtype') == 'bot_message' and data.get('bot_id') == 'B4ZFXE0A0':
-                        userid = "I-"+data.get("username")
+                        userid = "I-" + data.get("username")
                         user = user_info(userid)
                     else:
                         continue
                 msgtext = data.get("text")
-                print("Message in %s, from %s: %s" % (channel.get("name"), user_name(user), data.get("text")))
+                print("Message in %s, from %s: %s" %
+                      (channel.get("name"), user_name(user), data.get("text")))
 
                 if not msgtext:
                     continue
@@ -122,31 +139,39 @@ else:
                     if len(parts) == 1:
                         twos = twoinfo["twos"]
                         times = twoinfo["lasttime"]
-                        usertimes = [(user, number, times[user]) for (user, number) in twos.items()]
-                        leaders = list(reversed(sorted(usertimes, key=itemgetter(1,2))))
+                        usertimes = [(user, number, times[user])
+                                     for (user, number) in twos.items()]
+                        leaders = list(
+                            reversed(sorted(usertimes, key=itemgetter(1, 2))))
                         numleaders = 5
                         if len(leaders) > numleaders:
                             leaders = leaders[0:numleaders]
-                        text = ", ".join(["%s: %d" % (user_name(user_info(user)), num) for user, num, _ in leaders])
-                        send_message(channelid, "Leaderboard of shame: %s" % (text))
+                        text = ", ".join(
+                            ["%s: %d" % (user_name(user_info(user)), num) for user, num, _ in leaders])
+                        send_message(
+                            channelid, "Leaderboard of shame: %s" % (text))
                     if len(parts) == 2:
-                        match = re.search(r"(?:^<(@[^>]*)>$|^([^@<>\n ]+)$)", parts[1])
+                        match = re.search(
+                            r"(?:^<(@[^>]*)>$|^([^@<>\n ]+)$)", parts[1])
                         if not match:
-                            send_message(channelid, "Malformed %s command, didn't recognise parameter" % (command))
+                            send_message(
+                                channelid, "Malformed %s command, didn't recognise parameter" % (command))
                         else:
                             userid = match.groups()[0]
                             if userid is None:
                                 userid = match.groups()[1]
                             if userid is None:
                                 # uh-oh
-                                continue #???
+                                continue  # ???
                             if userid.startswith("@U"):
                                 userid = userid[1:]
                             else:
-                                userid = "I-%s (IRC)"%(userid)
-                            send_message(channelid, "%s has a total of %d" % (user_name(user_info(userid)), twoinfo["twos"].get(lower_id(userid), 0)))
+                                userid = "I-%s (IRC)" % (userid)
+                            send_message(channelid, "%s has a total of %d" % (
+                                user_name(user_info(userid)), twoinfo["twos"].get(lower_id(userid), 0)))
                     if len(parts) > 2:
-                        send_message(channelid, "Malformed %s command, specify zero or one parameters where the optional parameter is a  \"@mention\" for slack users or \"nick\" for IRC users" % (command))
+                        send_message(
+                            channelid, "Malformed %s command, specify zero or one parameters where the optional parameter is a  \"@mention\" for slack users or \"nick\" for IRC users" % (command))
                 if msgtext == keyword:
                     userid = lower_id(userid)
                     if userid not in twoinfo["twos"]:
@@ -155,7 +180,7 @@ else:
                         twoinfo["lasttime"][userid] = 0
                     now = time.time()
                     then = twoinfo["lasttime"][userid]
-                    if then+(60*10) > now:
+                    if then + (60 * 10) > now:
                         # Rate limit
                         pass
                     else:
@@ -163,5 +188,5 @@ else:
                         twoinfo["lasttime"][userid] = now
                         with open(filename, "w") as datafile:
                             datafile.write(json.dumps(twoinfo))
-                        send_message(channelid, "Whoops! %s got %s'd! (total: %d)" % (user_name(user), keyword, twoinfo["twos"][userid]))
-
+                        send_message(channelid, "Whoops! %s got %s'd! (total: %d)" % (
+                            user_name(user), keyword, twoinfo["twos"][userid]))
