@@ -207,7 +207,11 @@ class TwoBot:
             if msgtext.startswith(TwoBot.COMMAND):
                 self.handle_command(msgtext, channelid)
 
-            if msgtext == TwoBot.KEYWORD:
+            if any([
+                    msgtext == TwoBot.KEYWORD,
+                    msgtext == "_%s_" % (TwoBot.KEYWORD),
+                    msgtext == "*%s*" % (TwoBot.KEYWORD)
+                ]):
                 self.handle_keyword(channelid, user, userid)
 
     def run(self):
