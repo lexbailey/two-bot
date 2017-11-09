@@ -9,6 +9,7 @@ import os
 import re
 import time
 import json
+from datetime import datetime
 from operator import itemgetter
 from slackclient import SlackClient
 
@@ -30,10 +31,14 @@ class TwoBot:
                 datafile.close()
         with open(TwoBot.FILENAME, "r") as datafile:
             self.twoinfo = json.loads(datafile.read())
-            if "lasttime" not in self.twoinfo:
-                self.twoinfo["lasttime"] = {}
-            if "twos" not in self.twoinfo:
-                self.twoinfo["twos"] = {}
+            for key in ["lasttime", "limitmsgtime", "twos"]:
+                if key not in self.twoinfo:
+                    self.twoinfo[key] = {}
+
+    def save_data(self):
+        """ Save the data in the twoinfo structure """
+        with open(TwoBot.FILENAME, "w") as datafile:
+            datafile.write(json.dumps(self.twoinfo))
 
     def user_info(self, user):
         """ Gets the user info dict from slack for a user ID """
@@ -158,16 +163,25 @@ class TwoBot:
             self.twoinfo["twos"][userid] = 0
         if userid not in self.twoinfo["lasttime"]:
             self.twoinfo["lasttime"][userid] = 0
-        now = time.time()
         then = self.twoinfo["lasttime"][userid]
-        if then + (60 * 10) > now:
+        endtime = then + (60 * 10)
+        now = time.time()
+        if endtime > now:
             # Rate limit
-            pass
+            if userid not in self.twoinfo["limitmsgtime"]:
+                self.twoinfo["limitmsgtime"][userid] = 0
+            limittime = self.twoinfo["limitmsgtime"][userid]
+            last = self.twoinfo["lasttime"][userid]
+            if limittime < last:
+                self.twoinfo["limitmsgtime"][userid] = time.time()
+                timeoutstr = datetime.fromtimestamp(endtime).strftime("%H:%M")
+                self.send_message(channelid, "Rate limit: %s cannot be %s'd again until %s" % (
+                    TwoBot.user_name(user), TwoBot.KEYWORD, timeoutstr))
+                self.save_data()
         else:
             self.twoinfo["twos"][userid] += 1
             self.twoinfo["lasttime"][userid] = now
-            with open(TwoBot.FILENAME, "w") as datafile:
-                datafile.write(json.dumps(self.twoinfo))
+            self.save_data()
             self.send_message(channelid, "Whoops! %s got %s'd! (total: %d)" % (
                 TwoBot.user_name(user), TwoBot.KEYWORD, self.twoinfo["twos"][userid]))
 
