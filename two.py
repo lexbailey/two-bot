@@ -40,13 +40,29 @@ class TwoBot:
         with open(TwoBot.FILENAME, "w") as datafile:
             datafile.write(json.dumps(self.twoinfo))
 
+    def is_a_user(self, user):
+        """ Checks if a user is know to exist or to have existed """
+        if user is None:
+            return False
+        if user.startswith("I-"):
+            # IRC users exist only if they have been twod before
+            # because there is no good way to properly check if they
+            # exist
+            return user in self.twoinfo["twos"]
+        # For slack users, we can check if they exist.
+        return self.slack.api_call(
+            "users.info",
+            user=user
+        ).get("user") is not None
+
     def user_info(self, user):
         """ Gets the user info dict from slack for a user ID """
         if user is None:
             return None
         if user.startswith("I-"):
             # IRC user
-            return {"name": user[2:]}
+            nick = user[2:]
+            return {"name": nick}
         return self.slack.api_call(
             "users.info",
             user=user
@@ -147,9 +163,12 @@ class TwoBot:
                     userid = userid[1:]
                 else:
                     userid = "I-%s (IRC)" % (userid)
-                self.send_message(channelid, "%s has a total of %d" % (
-                    TwoBot.user_name(self.user_info(userid)),
-                    self.twoinfo["twos"].get(TwoBot.lower_id(userid), 0)))
+                if not self.is_a_user(userid):
+                    self.send_message(channelid, "No such user")
+                else:
+                    self.send_message(channelid, "%s has a total of %d" % (
+                        TwoBot.user_name(self.user_info(userid)),
+                        self.twoinfo["twos"].get(TwoBot.lower_id(userid), 0)))
         if len(parts) > 2:
             self.send_message(
                 channelid, "Malformed %s command, specify zero or one parameters "
