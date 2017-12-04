@@ -193,7 +193,8 @@ class TwoBot:
             last = self.twoinfo["lasttime"][userid]
             if limittime < last:
                 self.twoinfo["limitmsgtime"][userid] = time.time()
-                timeoutstr = datetime.fromtimestamp(endtime).strftime("%H:%M")
+                endtime_rounded = ((endtime // 60)+1)*60 # Round up to next minute
+                timeoutstr = datetime.fromtimestamp(endtime_rounded).strftime("%H:%M")
                 self.send_message(channelid, "Rate limit: %s cannot be %s'd again until %s" % (
                     TwoBot.user_name(user), TwoBot.KEYWORD, timeoutstr))
                 self.save_data()
