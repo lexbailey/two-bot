@@ -14,6 +14,8 @@ from operator import itemgetter
 from slackclient import SlackClient
 
 
+from api import API
+
 class TwoBot:
     """ The almighty two bot class, instantiate it, then run() it """
 
@@ -34,6 +36,8 @@ class TwoBot:
             for key in ["lasttime", "limitmsgtime", "twos"]:
                 if key not in self.twoinfo:
                     self.twoinfo[key] = {}
+        self.api = API(self)
+        self.api.start()
 
     def save_data(self):
         """ Save the data in the twoinfo structure """

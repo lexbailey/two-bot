@@ -2,3 +2,4 @@ secrets.sh
 config.sh
 venv/
 twodata.json
+__pycache__
