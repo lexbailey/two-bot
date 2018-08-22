@@ -227,6 +227,7 @@ class TwoBot:
             user = self.user_info(userid)
             if user is None:
                 if data.get('subtype') == 'bot_message' and data.get('bot_id') == 'B4ZFXE0A0':
+                    # Hardcoded exception for using IRC bridge with this bot id
                     userid = "I-" + data.get("username")
                     user = self.user_info(userid)
                 else:
