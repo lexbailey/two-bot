@@ -41,6 +41,33 @@ editor config.sh # Pick your test keyword and your test command word
 
 Running `./run.sh` will source `secrets.sh` and `config.sh` and then run the bot. Make sure you have activated the venv before running, or it will probably crash.
 
+## REST API
+You can get real-time access to the current two statistics via the provided REST API. It runs on `0.0.0.0:2222`. Below are the methods you can use:
+
+### GET /ids
+Returns JSON array of *user IDs* for all the users tracked by two-bot (any user that has been two'd).
+User IDs are Slack usernames unless they are forwarded from IRC, in which case they are `I-<irc nick> (IRC)`.
+### GET /leaderboard
+Returns a JSON array of objects, in descending order of two's (**first** element is the object with the **most** two's).
+Objects include:
+ - `id`: user ID as per **GET /ids**.
+ - `name`: Slack username or IRC nick
+ - `twos`: number of times two'd
+ - `last`: timestamp of last two
+### GET /info/<id>
+Returns in-deptth information about the user with id `<id>`, as JSON object:
+ - `id`: `<id>` as in URL
+ - `name`: username or IRC nick
+ - `real_name`: Real name from Slack or `<irc nick> (IRC)`.
+ - `is_bot`: True if either this user is an IRC user passed through the IRC bridge or a Slack bot that's been two'd.
+### GET /twos/<id>
+Returns information about when this user was last two'd, as JSON object:
+ - `id`: `<id>` as in URL
+ - `twos`: number of times two'd
+ - `last`: timestamp of last two
+
+Will fail with `404 not found` if an ID is passed that doesn't match a user (Even if that user is in Slack).
+
 ## Licence
 
 published under the MIT licence, see `LICENSE` (with an "S")
