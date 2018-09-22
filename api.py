@@ -1,4 +1,4 @@
-from bottle import Bottle, response
+from bottle import Bottle, response, HTTPError
 from threading import Thread
 from operator import itemgetter
 import time
@@ -9,9 +9,6 @@ class API(Bottle):
         Bottle.__init__(self)
         self.thread = Thread(name="two-bot API",target=self.worker, args=[host,port])
         self.bot = twobot
-
-        self.cache = {}
-        # Cache of user id -> minimal profile object
 
         self.route('/', callback=self.index)
         self.route('/ids', callback=self.ids)
@@ -24,32 +21,29 @@ class API(Bottle):
         self.thread.start()
 
     def worker(self,host,port): # run() method of thread
-        print("Starting worker with args: {} {} {}".format(type(self),type(host),type(port)))
         self.run(host=host, port=port)
 
     def get_user(self, user):
-        if user.startswith("I-"): # IRC user
+        """
+            Selects values from TwoBot.user_info to for use in GET /info/<user>, as TwoBot.user_info exposes too
+            much information from the Slack API
+        """
+        info = self.bot.user_info(user)
+        if info.get("irc_user", False):
             return {
-                "name": user[2:].split(" ")[0], # Trim the (IRC) off IRC users
+                "name": info["name"],
                 "id": user,
                 "is_bot": True,
-                "real_name": user[2:] # Leave it in here
+                "real_name": "{} (IRC)".format(info["name"])
             }
-        elif user in self.cache and age(self.cache[user]["fetched"]) > 900:
-            return self.cache[user]
+        elif info is None: return None
         else:
-            result = self.bot.slack.api_call(
-                "users.info",
-                user=user
-            ).get("user")
-            self.cache[user] = {
-                "name": result["name"],
-                "real_name": result["real_name"],
+            return {
+                "name": info["name"],
+                "real_name": info["real_name"],
                 "id": user,
-                "is_bot": result["is_bot"]
+                "is_bot": info.get("is_bot", False)
             }
-            self.cache[user]["fetched"] = time.time()
-            return self.cache[user]
 
     """ API endpoints """
 
@@ -85,7 +79,8 @@ class API(Bottle):
                 "twos": self.bot.twoinfo["twos"][user],
                 "last": self.bot.twoinfo["lasttime"][user]
             }
-        self.abort(404, "No user with that ID") # Should we just fail with 0 instead?
+        # else...        
+        raise HTTPError(status=404, body="No user with that ID")
 
     def leaderboard(self):
         """ GET /leaderboard
@@ -123,7 +118,3 @@ class API(Bottle):
                         the IRC bridge or a Slack bot that's been two'd (rare)
         """
         return self.get_user(user)
-
-def age(date):
-    """ helper method to streamline """
-    return time.time() - date
