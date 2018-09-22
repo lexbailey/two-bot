@@ -26,6 +26,7 @@ class TwoBot:
 
     def __init__(self):
         self.slack = SlackClient(TwoBot.SLACK_TOKEN)
+        self.cache = {} # Cache for Slack API calls; (user ID) -> (Slack API response)["user"]
         self.twoinfo = None
         if not os.path.isfile(TwoBot.FILENAME):
             with open(TwoBot.FILENAME, "w+") as datafile:
@@ -66,11 +67,18 @@ class TwoBot:
         if user.startswith("I-"):
             # IRC user
             nick = user[2:]
-            return {"name": nick}
-        return self.slack.api_call(
-            "users.info",
-            user=user
-        ).get("user")
+            return {"name": nick, "irc_user":True}
+        if user in self.cache and (time.time() - self.cache[user]["fetched"]) < 900: 
+            # could expose cache time (900s) as a config value
+            return self.cache[user]
+        else:
+            result = self.slack.api_call(
+                "users.info",
+                user=user
+            ).get("user")
+            result["fetched"] = time.time()
+            self.cache[user] = result
+            return result
 
     def channel_info(self, channel):
         """ Gets the channel info dict from slack for a user ID """
