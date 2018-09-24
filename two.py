@@ -34,7 +34,7 @@ class TwoBot:
             self.API_ADDRESS = config.get("api_address", "0.0.0.0")
             self.API_PORT = config.get("api_port", 2222)
         except KeyError as e:
-            print("Config.json missing some values! {}".format(e))
+            print("Config.yaml missing some values! {}".format(e))
             exit(3)
 
         self.slack = SlackClient(self.SLACK_TOKEN)
