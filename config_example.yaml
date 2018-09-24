@@ -1,0 +1,18 @@
+# commented-out config options are in their default state, uncommment them to change
+
+# api token - keep this secret!
+slack_token: xoxb-...
+
+# keyword that the bot picks up on - use 3 for testing
+keyword: 3
+# command to bring up the leaderboard
+command: "!three"
+# file to store two data in
+#filename: twodata.json
+
+# enables the REST API
+api_enable: false
+# use 0.0.0.0 to listen on all interfaces
+# ports < 1024 require root (sudo) if running on Linux
+#api_address: 0.0.0.0
+#api_port: 2222

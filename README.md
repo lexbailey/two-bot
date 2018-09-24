@@ -25,24 +25,18 @@ source venv/bin/activate # or similar, for your shell (e.g. activate.fish)
 
 This is done by going to the new bot page for your slack workspace `https://<workspace-name>.slack.com/services/new/bot`
 Pick a username and create the bot user, then copy the api key...
-```
-cp secrets_example.sh secrets.sh
-editor secrets.sh # paste your API key in the obvious place
-```
-
- - Configure the bot
 
 ```
-cp config_example.sh config.sh
-editor config.sh # Pick your test keyword and your test command word
+cp config_example.yaml config.yaml
+editor config.yaml # paste your api key in the obvious place, and choose a keyword and command
 ```
 
  - Run the bot
 
-Running `./run.sh` will source `secrets.sh` and `config.sh` and then run the bot. Make sure you have activated the venv before running, or it will probably crash.
+Running `./run.sh` will activate the venv and run the bot.
 
 ## REST API
-You can get real-time access to the current two statistics via the provided REST API. It runs on `0.0.0.0:2222`. Below are the methods you can use:
+You can get real-time access to the current two statistics via the provided REST API. It runs on `0.0.0.0:2222` by default, but you can change this in the config (or disable it entirely). Below are the methods you can use:
 
 ### GET /ids
 Returns JSON array of *user IDs* for all the users tracked by two-bot (any user that has been two'd).
