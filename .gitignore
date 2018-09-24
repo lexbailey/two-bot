@@ -1,5 +1,6 @@
 secrets.sh
 config.sh
+config.yaml
 venv/
 twodata.json
 __pycache__

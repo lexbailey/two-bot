@@ -12,37 +12,50 @@ import json
 from datetime import datetime
 from operator import itemgetter
 from slackclient import SlackClient
-
+import yaml
 
 from api import API
 
 class TwoBot:
     """ The almighty two bot class, instantiate it, then run() it """
 
-    SLACK_TOKEN = os.environ["TWO_SLACK_API_TOKEN"]
-    KEYWORD = os.environ["TWO_KEYWORD"]
-    COMMAND = os.environ["TWO_COMMAND"]
-    FILENAME = "twodata.json"  # This should really be a config option
-
     def __init__(self):
-        self.slack = SlackClient(TwoBot.SLACK_TOKEN)
+        try:
+            config = yaml.load(open('config.yaml'))
+        except FileNotFoundError as e:
+            print("No config.yaml found - have you copied config_example.yaml to config.yaml?")
+            exit(2)
+        try:
+            self.SLACK_TOKEN = config['slack_token']
+            self.KEYWORD = str(config['keyword']) # 2 in YAML will be a number, not str
+            self.COMMAND = config['command']
+            self.FILENAME = config.get("data_file", "twodata.json")
+            self.API_ENABLE = config.get("api_enable", False)
+            self.API_ADDRESS = config.get("api_address", "0.0.0.0")
+            self.API_PORT = config.get("api_port", 2222)
+        except KeyError as e:
+            print("Config.json missing some values! {}".format(e))
+            exit(3)
+
+        self.slack = SlackClient(self.SLACK_TOKEN)
         self.cache = {} # Cache for Slack API calls; (user ID) -> (Slack API response)["user"]
         self.twoinfo = None
-        if not os.path.isfile(TwoBot.FILENAME):
-            with open(TwoBot.FILENAME, "w+") as datafile:
+        if not os.path.isfile(self.FILENAME):
+            with open(self.FILENAME, "w+") as datafile:
                 datafile.write("{}")
                 datafile.close()
-        with open(TwoBot.FILENAME, "r") as datafile:
+        with open(self.FILENAME, "r") as datafile:
             self.twoinfo = json.loads(datafile.read())
             for key in ["lasttime", "limitmsgtime", "twos"]:
                 if key not in self.twoinfo:
                     self.twoinfo[key] = {}
-        self.api = API(self)
-        self.api.start()
+        if self.API_ENABLE:
+            self.api = API(self, host=self.API_ADDRESS, port=self.API_PORT)
+            self.api.start()
 
     def save_data(self):
         """ Save the data in the twoinfo structure """
-        with open(TwoBot.FILENAME, "w") as datafile:
+        with open(self.FILENAME, "w") as datafile:
             datafile.write(json.dumps(self.twoinfo))
 
     def is_a_user(self, user):
@@ -163,7 +176,7 @@ class TwoBot:
             if not match:
                 self.send_message(
                     channelid, "Malformed %s command, didn't recognise parameter" %
-                    (TwoBot.COMMAND))
+                    (self.COMMAND))
             else:
                 userid = match.groups()[0]
                 if userid is None:
@@ -185,7 +198,7 @@ class TwoBot:
             self.send_message(
                 channelid, "Malformed %s command, specify zero or one parameters "
                 "where the optional parameter is a  \"@mention\" for slack users "
-                "or \"nick\" for IRC users" % (TwoBot.COMMAND))
+                "or \"nick\" for IRC users" % (self.COMMAND))
 
     def handle_keyword(self, channelid, user, userid):
         """ respond to the keyword """
@@ -208,14 +221,14 @@ class TwoBot:
                 endtime_rounded = ((endtime // 60)+1)*60 # Round up to next minute
                 timeoutstr = datetime.fromtimestamp(endtime_rounded).strftime("%H:%M")
                 self.send_message(channelid, "Rate limit: %s cannot be %s'd again until %s" % (
-                    TwoBot.user_name(user), TwoBot.KEYWORD, timeoutstr))
+                    TwoBot.user_name(user), self.KEYWORD, timeoutstr))
                 self.save_data()
         else:
             self.twoinfo["twos"][userid] += 1
             self.twoinfo["lasttime"][userid] = now
             self.save_data()
             self.send_message(channelid, "Whoops! %s got %s'd! (total: %d)" % (
-                TwoBot.user_name(user), TwoBot.KEYWORD, self.twoinfo["twos"][userid]))
+                TwoBot.user_name(user), self.KEYWORD, self.twoinfo["twos"][userid]))
 
     def run_once(self):
         """ Wait until a messages is available, then deal with it and return """
@@ -251,13 +264,13 @@ class TwoBot:
             msgtext = msgtext.strip()
 
             # At this point we have a valid message
-            if msgtext.startswith(TwoBot.COMMAND):
+            if msgtext.startswith(self.COMMAND):
                 self.handle_command(msgtext, channelid)
 
             if any([
-                    msgtext == TwoBot.KEYWORD,
-                    msgtext == "_%s_" % (TwoBot.KEYWORD),
-                    msgtext == "*%s*" % (TwoBot.KEYWORD)
+                    msgtext == self.KEYWORD,
+                    msgtext == "_%s_" % (self.KEYWORD),
+                    msgtext == "*%s*" % (self.KEYWORD)
                 ]):
                 self.handle_keyword(channelid, user, userid)
 

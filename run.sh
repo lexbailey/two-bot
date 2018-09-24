@@ -1,4 +1,3 @@
 #!/usr/bin/env bash
-source secrets.sh
-source config.sh
-./two.py
+source venv/bin/activate
+python two.py
