@@ -50,6 +50,8 @@ class TwoBot:
                 if key not in self.twoinfo:
                     self.twoinfo[key] = {}
         if self.API_ENABLE:
+            self.starttime = datetime.utcnow()
+            print("{} {} {} starttime".format(self, type(self), self.starttime))
             self.api = API(self, host=self.API_ADDRESS, port=self.API_PORT)
             self.api.start()
 

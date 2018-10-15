@@ -2,6 +2,7 @@ from bottle import Bottle, response, HTTPError
 from threading import Thread
 from operator import itemgetter
 import time
+from datetime import datetime
 import json
 
 class API(Bottle):
@@ -16,6 +17,7 @@ class API(Bottle):
         self.route('/leaderboard', callback=self.leaderboard)
 
         self.route('/info/<user>', callback=self.info)
+        self.route('/uptime', callback=self.uptime);
 
     def start(self):
         self.thread.start()
@@ -118,3 +120,19 @@ class API(Bottle):
                         the IRC bridge or a Slack bot that's been two'd (rare)
         """
         return self.get_user(user)
+
+    def uptime(self):
+        """ GET /uptime
+            application/json
+
+            Returns information about how long the application has been running:
+                starttime: timestamp of when the application was started (UTC, in floating-point seconds)
+                starttime_s: ISO representation of starttime
+                duration: Seconds since starttime (floating-point)
+        """
+        print(self.bot.starttime)
+        return {
+            'starttime': self.bot.starttime.timestamp(),
+            'starttime_s': self.bot.starttime.isoformat(),
+            'duration': datetime.utcnow().timestamp() - self.bot.starttime.timestamp() # time.time() isn't reliably UTC in my testing
+        }
