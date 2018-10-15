@@ -61,6 +61,11 @@ Returns information about when this user was last two'd, as JSON object:
  - `last`: timestamp of last two
 
 Will fail with `404 not found` if an ID is passed that doesn't match a user (Even if that user is in Slack).
+### GET /uptime
+Returns information about how long the application has been running, as JSON object:
+ - `starttime`: timestamp of when the application was started (UTC, in floating-point seconds)
+ - `starttime_s`: ISO representation of `starttime`
+ - `duration`: Seconds since `starttime` (floating-point)
 
 ## Licence
 
