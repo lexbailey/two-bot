@@ -11,7 +11,8 @@ import time
 import json
 from datetime import datetime
 from operator import itemgetter
-from slackclient import SlackClient
+from slack import RTMClient, WebClient
+import asyncio
 import yaml
 
 from api import API
@@ -21,7 +22,7 @@ class TwoBot:
 
     def __init__(self):
         try:
-            config = yaml.load(open('config.yaml'))
+            config = yaml.load(open('config.yaml'), Loader=yaml.Loader)
         except FileNotFoundError as e:
             print("No config.yaml found - have you copied config_example.yaml to config.yaml?")
             exit(2)
@@ -37,7 +38,13 @@ class TwoBot:
             print("Config.yaml missing some values! {}".format(e))
             exit(3)
 
-        self.slack = SlackClient(self.SLACK_TOKEN)
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        self.rtm = RTMClient(token=self.SLACK_TOKEN, run_async=True, loop=self.loop)
+        self.web = WebClient(token=self.SLACK_TOKEN, run_async=True, loop=self.loop)
+
+        self.rtm.run_on(event="message")(self.handle_message)
+
         self.cache = {} # Cache for Slack API calls; (user ID) -> (Slack API response)["user"]
         self.twoinfo = None
         if not os.path.isfile(self.FILENAME):
@@ -60,7 +67,7 @@ class TwoBot:
         with open(self.FILENAME, "w") as datafile:
             datafile.write(json.dumps(self.twoinfo))
 
-    def is_a_user(self, user):
+    async def is_a_user(self, user):
         """ Checks if a user is know to exist or to have existed """
         if user is None:
             return False
@@ -70,12 +77,11 @@ class TwoBot:
             # exist
             return user in self.twoinfo["twos"]
         # For slack users, we can check if they exist.
-        return self.slack.api_call(
-            "users.info",
+        return (await self.web.users_info(
             user=user
-        ).get("user") is not None
+        )).get("user") is not None
 
-    def user_info(self, user):
+    async def user_info(self, user):
         """ Gets the user info dict from slack for a user ID """
         if user is None:
             return None
@@ -87,25 +93,22 @@ class TwoBot:
             # could expose cache time (900s) as a config value
             return self.cache[user]
         else:
-            result = self.slack.api_call(
-                "users.info",
+            result = (await self.web.users_info(
                 user=user
-            ).get("user")
+            )).get("user")
             result["fetched"] = time.time()
             self.cache[user] = result
             return result
 
-    def channel_info(self, channel):
+    async def channel_info(self, channel):
         """ Gets the channel info dict from slack for a user ID """
-        return self.slack.api_call(
-            "channels.info",
+        return (await self.web.channels_info(
             channel=channel
-        ).get("channel")
+        )).get("channel")
 
-    def send_message(self, channel, text):
+    async def send_message(self, channel, text):
         """ Send `text` as a message to `channel` in slack """
-        return self.slack.api_call(
-            "chat.postMessage",
+        return await self.web.chat_postMessage(
             channel=channel,
             text=text
         )
@@ -154,7 +157,7 @@ class TwoBot:
             return "I-" + userid[2:-6].lower() + " (IRC)"
         return userid
 
-    def handle_command(self, msgtext, channelid):
+    async def handle_command(self, msgtext, channelid):
         """ respond to a command message """
         parts = [part for part in msgtext.split(" ") if part != ""]
         if len(parts) == 1:
@@ -168,15 +171,15 @@ class TwoBot:
             if len(leaders) > numleaders:
                 leaders = leaders[0:numleaders]
             text = ", ".join(
-                ["%s: %d" % (TwoBot.user_name(self.user_info(user)), num)
+                ["%s: %d" % (TwoBot.user_name(await self.user_info(user)), num)
                  for user, num, _ in leaders])
-            self.send_message(
+            await self.send_message(
                 channelid, "Leaderboard of shame: %s" % (text))
         if len(parts) == 2:
             match = re.search(
                 r"(?:^<(@[^>]*)>$|^([^@<>\n ]+)$)", parts[1])
             if not match:
-                self.send_message(
+                await self.send_message(
                     channelid, "Malformed %s command, didn't recognise parameter" %
                     (self.COMMAND))
             else:
@@ -190,19 +193,19 @@ class TwoBot:
                     userid = userid[1:]
                 else:
                     userid = "I-%s (IRC)" % (userid)
-                if not self.is_a_user(userid):
-                    self.send_message(channelid, "No such user")
+                if not await self.is_a_user(userid):
+                    await self.send_message(channelid, "No such user")
                 else:
-                    self.send_message(channelid, "%s has a total of %d" % (
+                    await self.send_message(channelid, "%s has a total of %d" % (
                         TwoBot.user_name(self.user_info(userid)),
                         self.twoinfo["twos"].get(TwoBot.lower_id(userid), 0)))
         if len(parts) > 2:
-            self.send_message(
+            await self.send_message(
                 channelid, "Malformed %s command, specify zero or one parameters "
                 "where the optional parameter is a  \"@mention\" for slack users "
                 "or \"nick\" for IRC users" % (self.COMMAND))
 
-    def handle_keyword(self, channelid, user, userid):
+    async def handle_keyword(self, channelid, user, userid):
         """ respond to the keyword """
         userid = TwoBot.lower_id(userid)
         if userid not in self.twoinfo["twos"]:
@@ -222,68 +225,61 @@ class TwoBot:
                 self.twoinfo["limitmsgtime"][userid] = time.time()
                 endtime_rounded = ((endtime // 60)+1)*60 # Round up to next minute
                 timeoutstr = datetime.fromtimestamp(endtime_rounded).strftime("%H:%M")
-                self.send_message(channelid, "Rate limit: %s cannot be %s'd again until %s" % (
+                await self.send_message(channelid, "Rate limit: %s cannot be %s'd again until %s" % (
                     TwoBot.user_name(user), self.KEYWORD, timeoutstr))
                 self.save_data()
         else:
             self.twoinfo["twos"][userid] += 1
             self.twoinfo["lasttime"][userid] = now
             self.save_data()
-            self.send_message(channelid, "Whoops! %s got %s'd! (total: %d)" % (
+            await self.send_message(channelid, "Whoops! %s got %s'd! (total: %d)" % (
                 TwoBot.user_name(user), self.KEYWORD, self.twoinfo["twos"][userid]))
 
-    def run_once(self):
-        """ Wait until a messages is available, then deal with it and return """
-        data_list = self.slack.rtm_read(blocking=True)
-        for data in data_list:
-            # There's lots of reasons to ignore a message...
-            data_type = data.get("type")
-            if data_type != "message":
-                # Must be of type message
-                continue
-            channelid = data.get("channel")
-            channel = self.channel_info(channelid)
-            if channel is None:
-                # Must have a valid channel
-                continue
-            userid = data.get("user")
-            user = self.user_info(userid)
-            if user is None:
-                if data.get('subtype') == 'bot_message' and data.get('bot_id') == 'B4ZFXE0A0':
-                    # Hardcoded exception for using IRC bridge with this bot id
-                    userid = "I-" + data.get("username")
-                    user = self.user_info(userid)
-                else:
-                    # Must be from a valid user
-                    continue
-            msgtext = data.get("text")
+    async def handle_message(self, **payload):
+        data = payload["data"]
+        # There's lots of reasons to ignore a message...
+        data_type = data.get("type")
+        if data_type != "message" and data_type != None: # recent API omits "type"
+            # Must be of type message
+            return
+        channelid = data.get("channel")
+        channel = await self.channel_info(channelid)
+        if channel is None:
+            # Must have a valid channel
+            return
+        userid = data.get("user")
+        user = await self.user_info(userid)
+        if user is None:
+            if data.get('subtype') == 'bot_message' and data.get('bot_id') == 'B4ZFXE0A0':
+                # Hardcoded exception for using IRC bridge with this bot id
+                userid = "I-" + data.get("username")
+                user = await self.user_info(userid)
+            else:
+                # Must be from a valid user
+                return
+        msgtext = data.get("text")
+
+        if not msgtext:
+            # Must contain some text
+            return
+        msgtext = msgtext.strip()
+
+        # At this point we have a valid message
+        if msgtext.startswith(self.COMMAND):
+            await self.handle_command(msgtext, channelid)
+
+        if any([
+                msgtext == self.KEYWORD,
+                msgtext == "_%s_" % (self.KEYWORD),
+                msgtext == "*%s*" % (self.KEYWORD)
+            ]):
             print("Message in %s, from %s: %s" %
-                  (channel.get("name"), TwoBot.user_name(user), data.get("text")))
-
-            if not msgtext:
-                # Must contain some text
-                continue
-            msgtext = msgtext.strip()
-
-            # At this point we have a valid message
-            if msgtext.startswith(self.COMMAND):
-                self.handle_command(msgtext, channelid)
-
-            if any([
-                    msgtext == self.KEYWORD,
-                    msgtext == "_%s_" % (self.KEYWORD),
-                    msgtext == "*%s*" % (self.KEYWORD)
-                ]):
-                self.handle_keyword(channelid, user, userid)
+                    (channel.get("name"), TwoBot.user_name(user), data.get("text")))
+            await self.handle_keyword(channelid, user, userid)
 
     def run(self):
-        """ Run the slack bot! Unitil interrupted """
-        if not self.slack.rtm_connect():
-            print("Unable to connect")
-        else:
-            print("Connected to slack")
-            while True:
-                self.run_once()
+        """ Run the slack bot! Until interrupted """
+        self.loop.run_until_complete(self.rtm.start())
 
 
 if __name__ == "__main__":
