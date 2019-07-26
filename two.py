@@ -280,6 +280,7 @@ class TwoBot:
     def run(self):
         """ Run the slack bot! Until interrupted """
         self.loop.run_until_complete(self.rtm.start())
+        self.loop.close()
 
 
 if __name__ == "__main__":
