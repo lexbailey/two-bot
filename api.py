@@ -4,6 +4,7 @@ from operator import itemgetter
 import time
 from datetime import datetime
 import json
+import asyncio
 
 class API(Bottle):
     def __init__(self, twobot, host="0.0.0.0", port=2222):
@@ -17,7 +18,7 @@ class API(Bottle):
         self.route('/leaderboard', callback=self.leaderboard)
 
         self.route('/info/<user>', callback=self.info)
-        self.route('/uptime', callback=self.uptime);
+        self.route('/uptime', callback=self.uptime)
 
     def start(self):
         self.thread.start()
@@ -30,7 +31,7 @@ class API(Bottle):
             Selects values from TwoBot.user_info to for use in GET /info/<user>, as TwoBot.user_info exposes too
             much information from the Slack API
         """
-        info = self.bot.user_info(user)
+        info = asyncio.run_coroutine_threadsafe(self.bot.user_info(user), self.bot.loop).result()
         if info.get("irc_user", False):
             return {
                 "name": info["name"],
