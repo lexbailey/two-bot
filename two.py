@@ -195,7 +195,7 @@ class TwoBot:
                     await self.send_message(channelid, "No such user")
                 else:
                     await self.send_message(channelid, "%s has a total of %d" % (
-                        TwoBot.user_name(self.user_info(userid)),
+                        TwoBot.user_name(await self.user_info(userid)),
                         self.twoinfo["twos"].get(TwoBot.lower_id(userid), 0)))
         if len(parts) > 2:
             await self.send_message(
