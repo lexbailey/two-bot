@@ -39,7 +39,6 @@ class TwoBot:
             exit(3)
 
         self.loop = asyncio.get_event_loop()
-        asyncio.set_event_loop(self.loop)
         self.rtm = RTMClient(token=self.SLACK_TOKEN, run_async=True, loop=self.loop)
         self.web = WebClient(token=self.SLACK_TOKEN, run_async=True, loop=self.loop)
 
