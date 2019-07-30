@@ -38,7 +38,7 @@ class TwoBot:
             print("Config.yaml missing some values! {}".format(e))
             exit(3)
 
-        self.loop = asyncio.new_event_loop()
+        self.loop = asyncio.get_event_loop()
         asyncio.set_event_loop(self.loop)
         self.rtm = RTMClient(token=self.SLACK_TOKEN, run_async=True, loop=self.loop)
         self.web = WebClient(token=self.SLACK_TOKEN, run_async=True, loop=self.loop)
@@ -58,7 +58,6 @@ class TwoBot:
                     self.twoinfo[key] = {}
         if self.API_ENABLE:
             self.starttime = datetime.utcnow()
-            print("{} {} {} starttime".format(self, type(self), self.starttime))
             self.api = API(self, host=self.API_ADDRESS, port=self.API_PORT)
             self.api.start()
 
