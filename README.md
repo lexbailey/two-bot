@@ -4,6 +4,10 @@ Two-bot is a slack bot that counts the number of times a keyword is sent in any 
 
 It's only practical application is to be a game. The game is to call people out for leaving their keyboard unattended, by sending the keyword from their account. Two-bot can show a leaderboard-of-shame with a list of the top victims. It can also tell you the current count for a given user.
 
+## This repo is no longer maintained
+
+I have moved on from where I was when I cared about maintaining this code. Other forks are available, which may or may not be better maintained than this version.
+
 ## Installation
 
  - Clone the repo
